@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
     int disk_write_amount = 0;
     int disk_read_amount = 0;
 
-    // Configuration.
+    /* Configuration. */
 
     if (argc < 4 || argc > 5)
         usage();
@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
     if (ALG_NONE == alg)
         usage();
 
-    // Paginate.
+    /* Paginate. */
 
     while (2 == scanf("%lx %[RW]", &address, &op))
     {
@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
         unsigned long page_i = (address & (~address | (address + 1))) >> ;
     }
 
-    // Statistics.
+    /* Statistics. */
 
     {
         int width = 4;
