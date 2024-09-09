@@ -64,7 +64,7 @@ void init_osPRNG(linkedList** head) {
 	int  err = 0;
 	FILE* infile;
 	char buf[MAX_LEN];
-	linkedListPtr next = NULL, current = NULL;
+	/* linkedListPtr current = NULL; */ // XXX
 
 	infile = fopen("random.txt", "r");
 
@@ -162,7 +162,7 @@ int getInt(char* buf, FILE* infile) {
 
 	}
 
-//	buf[count] = NULL;
+  	/* buf[count] = NULL; */
 	buf[count] = '\0';
 
 	return err;
