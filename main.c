@@ -29,15 +29,15 @@ char *algs[] = { ALG_XS(AS_STR, COMMA) };
 
 static struct entry
 {
-    int is_present;
-    int is_dirty;
-    int references;
+    int is_present; /* XXX should be in frame */
+    int is_dirty; /* XXX should be in frame */
+    int references; /* XXX should be in frame */
     int has_something;
     int frame_i;
 } table[1 << 22] = {0};
 
 /* Rewrite as struct with optional members. */
-static int frames[1024] = {0};
+static int frames[1024] = {0}; /* XXX should be struct, see above */
 int n_frame = 0;
 int frame_start = 0;
 
@@ -133,6 +133,7 @@ int main(int argc, char *argv[])
             {
                 switch (alg)
                 {
+                    case ALG_MIDPOINT_INSERTION: /* Also temporary XXX */
                     case ALG_LEAST_FREQUENTLY_USED: /* Fall through. XXX Temporary! */
                     case ALG_RANDOM:
                         frame_i = osPRNG() % frame_max;
