@@ -23,7 +23,8 @@ X(gc  , GLOBAL_CLOCK         )SP \
 X(lfu , LEAST_FREQUENTLY_USED)SP \
 X(lru , LEAST_RECENTLY_USED  )SP \
 X(rand, RANDOM               )SP \
-X(mid , MIDPOINT_INSERTION   )
+X(mid , MIDPOINT_INSERTION   )SP \
+X(nfu , NOT_RECENTLY_USED    )
 
 #define PAGE_SIZE_XS(X, SP) X(1024, 10)SP X(4096, 12)SP X(16384, 14)
 
@@ -168,11 +169,25 @@ int main(int argc, char *argv[])
 
             if (ALG_LEAST_RECENTLY_USED == alg)
             {
+#if 1
+                int frame_last    = (frame_start - 1 + n_frame) % n_frame;
+                int frame_current = table[page_i].frame_i;
+                int page_last     = frames[frame_last];
+
+                int frame_tmp     = frames[frame_last];
+                frames[frame_last] = frames[frame_current];
+                frames[frame_current] = frame_tmp;
+
+                table[page_i].frame_i = frame_last;
+                table[page_last].frame_i = frame_current;
+
+#else
                 int frame_last    = (frame_start - 1 + n_frame) % n_frame;
                 int frame_current = table[page_i].frame_i;
                 int frame_tmp     = frames[frame_last];
                 frames[frame_last] = frames[frame_current];
                 frames[frame_current] = frame_tmp;
+#endif
             }
 
             if (ALG_MIDPOINT_INSERTION == alg)
@@ -228,6 +243,41 @@ int main(int argc, char *argv[])
                         frame_i = frame_start;
                         frame_start = (frame_start + 1) % frame_max; 
                     break;
+
+		    case ALG_NOT_RECENTLY_USED:
+                    {
+                        int i;
+                        int n_none = 0;
+                        int n_read = 0;
+                        int next = 0;
+                        static int set[1024];
+                        for (i = 0; i < frame_max; i++)
+                            if (!table[frames[i]].references)
+                                n_none++;
+                            else if (!table[frames[i]].is_dirty)
+                                n_read++;
+
+                        if (n_none > 0)
+                        {
+                            for (i = 0; i < frame_max; i++)
+                                if (!table[frames[i]].references)
+                                    set[next++] = i;
+                        }
+                        else if (n_read > 0)
+                        {
+                            for (i = 0; i < frame_max; i++)
+                                if (table[frames[i]].references && !table[frames[i]].is_dirty)
+                                    set[next++] = i;
+                        }
+                        else
+                        {
+                            for (i = 0; i < frame_max; i++)
+                                if (table[frames[i]].references && table[frames[i]].is_dirty)
+                                    set[next++] = i;
+                        }
+                        frame_i = set[osPRNG() % next];
+                    }
+		    break;
 
                     case ALG_LEAST_FREQUENTLY_USED:
                         if (0 == pool_n_frame)
