@@ -61,11 +61,12 @@ int main(int argc, char *argv[])
     int is_verbose = 0;
     enum alg alg = 0;
     unsigned long address;
-    char op;
     int memory_access_count = 0;
     int    page_fault_count = 0;
     int    disk_write_count = 0;
     int     disk_read_count = 0;
+
+    atexit(osPRNG_deinit);
 
     /* Configuration. */
 
@@ -114,9 +115,13 @@ int main(int argc, char *argv[])
 
     /* Paginate. */
 
-    for (; 2 == scanf("%lx %[RW]", &address, &op); memory_access_count++)
+    for (; 1 == scanf("%lx ", &address); memory_access_count++)
     {
+        enum op op = getchar();
         unsigned long page_i = address >> page_width;
+
+        if (op != OP_WRITE && op != OP_READ)
+            break;
 
         if (ALG_LEAST_FREQUENTLY_USED == alg
 			&& !(memory_access_count % 4) && n_frame > 0)
@@ -212,7 +217,7 @@ int main(int argc, char *argv[])
                     break;
 
                     case ALG_MIDPOINT_INSERTION:
-                        /* Let's FUCKING go... */
+		    	frame_i = 0;
                     break;
 
                     default:

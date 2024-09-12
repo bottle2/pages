@@ -59,11 +59,24 @@ return random;
 
 }
 
+void osPRNG_deinit(void) {
+	if ( current != NULL) {
+		linkedListPtr first = current;
+		linkedListPtr next;
+		do {
+			next = current->next;
+			free(current);
+			current = next;
+		} while (current != first);
+	}
+}
+
 void init_osPRNG(linkedList** head) {
 
 	int  err = 0;
 	FILE* infile;
 	char buf[MAX_LEN];
+	linkedListPtr current_ = NULL;
 
 	infile = fopen("random.txt", "r");
 
@@ -81,30 +94,30 @@ void init_osPRNG(linkedList** head) {
 		err = getInt(buf, infile);
 
 	if(err == 0) {
-		current = malloc(sizeof(linkedList));
-		if(current == NULL)
+		current_ = malloc(sizeof(linkedList));
+		if(current_ == NULL)
 			err = 1;
 		else {
 			if(*head == NULL)
-				*head = current;
+				*head = current_;
 
-			sscanf(buf, "%d", &current->value);
+			sscanf(buf, "%d", &current_->value);
 		}		
 	}
 	
 	while( err == 0 && getInt(buf, infile) == 0) {
 
-		current->next = malloc(sizeof(linkedList));
-		if(current->next == NULL)
+		current_->next = malloc(sizeof(linkedList));
+		if(current_->next == NULL)
 			err = 1;
 		else {
-			current = current->next;
-			sscanf(buf, "%d", &current->value);
+			current_ = current_->next;
+			sscanf(buf, "%d", &current_->value);
 		}
 	}
 
 	if(err == 0)
-		current->next = *head;
+		current_->next = *head;
 
 }
 

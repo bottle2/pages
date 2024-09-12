@@ -9,5 +9,6 @@
 #include <stdlib.h>
 
 int osPRNG(void);
+void osPRNG_deinit(void);
 
 #endif
