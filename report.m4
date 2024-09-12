@@ -12,9 +12,10 @@ Algoritmo de	Faltas de	Escritas	Leituras
 subsituição de página	memória	em disco	em disco
 _
 Aleatório	undivert(tst$1-rand.txt)
-Menos usado	undivert(tst$1-fifo.txt)
-Menos frequente	undivert(tst$1-lru.txt)
-FIFO	undivert(tst$1-gc.txt)
+Menos usado	undivert(tst$1-lru.txt)
+Menos frequente	undivert(tst$1-lfu.txt)
+FIFO	undivert(tst$1-fifo.txt)
+Global clock	undivert(tst$1-gc.txt)
 _
 .TE])dnl
 .TL

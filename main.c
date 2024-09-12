@@ -1,10 +1,19 @@
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "osPRNG.h"
+
+/* Possible improvements:
+ * - Review usage of n_frame + frame_start vs frame_start + frame_end.
+ * - Consider turning `frames` into an array of struct and put `is_dirty` and
+ *   `references` from `struct entry` there.
+ * - Employ X macros for statistics.
+ * - Could use some unions to reuse less variables across algorithms.
+ */
 
 #define ALG_XS(X, SP)           \
 X(fifo, FIRST_IN_FIRST_OUT   )SP \
@@ -29,17 +38,18 @@ char *algs[] = { ALG_XS(AS_STR, COMMA) };
 
 static struct entry
 {
-    int is_present; /* XXX should be in frame */
-    int is_dirty; /* XXX should be in frame */
-    int references; /* XXX should be in frame */
+    int is_present;
+    int is_dirty;
+    int references;
     int has_something;
     int frame_i;
 } table[1 << 22] = {0};
 
-/* Rewrite as struct with optional members. */
-static int frames[1024] = {0}; /* XXX should be struct, see above */
+static int frames[1024] = {0};
 int n_frame = 0;
 int frame_start = 0;
+int pool_n_frame = 0;
+int pool_frame_start = 0;
 
 static void usage(void);
 static int ilog10(int);
@@ -108,6 +118,14 @@ int main(int argc, char *argv[])
     {
         unsigned long page_i = address >> page_width;
 
+        if (ALG_LEAST_FREQUENTLY_USED == alg
+			&& !(memory_access_count % 4) && n_frame > 0)
+        {
+            pool_n_frame++;
+            frame_start = (frame_start + 1) % frame_max;
+            n_frame--;
+        }
+
         if (table[page_i].is_present)
         {
             table[page_i].references++;
@@ -120,6 +138,11 @@ int main(int argc, char *argv[])
                 frames[frame_last] = frames[frame_current];
                 frames[frame_current] = frame_tmp;
             }
+
+            if (ALG_MIDPOINT_INSERTION == alg)
+            {
+                /* TODO Bota no início do new list, "envelhece demais" */
+            }
         }
         else
         {
@@ -127,14 +150,12 @@ int main(int argc, char *argv[])
 
             page_fault_count++;
 
-            if (n_frame < frame_max)
-                frame_i = n_frame++;
+            if (pool_n_frame + n_frame < frame_max)
+                frame_i = frame_start + n_frame++;
             else
             {
                 switch (alg)
                 {
-                    case ALG_MIDPOINT_INSERTION: /* Also temporary XXX */
-                    case ALG_LEAST_FREQUENTLY_USED: /* Fall through. XXX Temporary! */
                     case ALG_RANDOM:
                         frame_i = osPRNG() % frame_max;
                     break;
@@ -155,8 +176,47 @@ int main(int argc, char *argv[])
                         frame_start = (frame_start + 1) % frame_max; 
                     break;
 
+                    case ALG_LEAST_FREQUENTLY_USED:
+                        if (0 == pool_n_frame)
+                        {
+                            frame_i = frame_start;
+                            frame_start = (frame_start + 1) % frame_max;
+                        }
+                        else
+                        {
+                            int i;
+                            int best=table[frames[pool_frame_start]].references;
+                            frame_i = pool_frame_start;
+                            for (
+                                i = (pool_frame_start + 1) % frame_max;
+                                i < (pool_frame_start+pool_n_frame) % frame_max;
+                                i = (i + 1) % frame_max
+                            ) {
+                                int candidate = table[frames[i]].references;
+                                if (candidate < best)
+                                {
+                                    best = candidate;
+                                    frame_i = i;
+                                }
+                            }
+
+                            /* Bota o primeiro do pool no lugar do escolhido. */
+                            frames[frame_i] = frames[pool_frame_start];
+                            frame_i = pool_frame_start;
+
+                            /* No lugar do primeiro, bota a página nova. */
+                            pool_frame_start = (pool_frame_start+1) % frame_max;
+                            pool_n_frame--;
+                            n_frame = (n_frame + 1) % frame_max;
+                        }
+                    break;
+
+                    case ALG_MIDPOINT_INSERTION:
+                        /* Let's FUCKING go... */
+                    break;
+
                     default:
-                        assert(!"Unknown page replacement algorithm.");
+                        assert(!"Unhandled page replacement algorithm.");
                     break;
                 }
 
@@ -165,7 +225,7 @@ int main(int argc, char *argv[])
 
                 table[frames[frame_i]].is_present = 0;
 
-		frames[frame_i] = page_i;
+                frames[frame_i] = page_i;
             }
 
             if (table[page_i].has_something)
@@ -213,7 +273,7 @@ static void usage(void)
     exit(EXIT_FAILURE);
 }
 
-/* Naïve solution. */
+/* Naïve solution. TODO */
 static int ilog10(int n)
 {
     int res = 0;
