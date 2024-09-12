@@ -6,7 +6,7 @@ OBJECT=main.o osPRNG.o
 
 TXT=tst0_1k.txt tst1_300k.txt tst2_5M.txt tst3_30M.txt
 
-all:$(TARGET) $(TXT)
+all:$(TARGET)
 
 $(TARGET):$(OBJECT)
 	$(CC) $(CFLAGS) -o $@ $(OBJECT) $(LDLIBS)

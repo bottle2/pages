@@ -205,6 +205,8 @@ int main(int argc, char *argv[])
         else
         {
             int frame_i;
+            unsigned long old_virtual;
+            char *swap = " swap,";
 
             page_fault_count++;
 
@@ -321,12 +323,18 @@ int main(int argc, char *argv[])
 send_me_to_hell_idc:
 
                 if (table[frames[frame_i]].is_dirty)
+                {
                     disk_write_count++;
+                    swap += 6;
+                }
 
                 table[frames[frame_i]].is_present = 0;
 
+                old_virtual = frames[frame_i];
                 frames[frame_i] = page_i;
+                printf("Pag_virtual %lX (%d fisica)%s trocada por %lX\n", old_virtual, frame_i, swap, page_i);
             }
+
 
             if (table[page_i].has_something)
                 disk_read_count++;
