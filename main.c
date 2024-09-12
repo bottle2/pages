@@ -13,6 +13,8 @@
  *   `references` from `struct entry` there.
  * - Employ X macros for statistics.
  * - Could use some unions to reuse less variables across algorithms.
+ * - There is probably lots of refactoring opportunity.
+ * - Zero attempts creating abstractions.
  */
 
 #define ALG_XS(X, SP)           \
@@ -50,6 +52,36 @@ int n_frame = 0;
 int frame_start = 0;
 int pool_n_frame = 0;
 int pool_frame_start = 0;
+static struct link { struct link *prev, *next; int is_new; } links[1024] = {0};
+struct link *new_start = NULL, *new_last = NULL,
+            *old_start = NULL, *old_last = NULL;
+int old_max, new_max, n_old = 0, n_new = 0;
+
+/* This has gone too far. */
+
+struct ll
+{
+    int n;
+    struct link *first;
+    struct link *last;
+};
+
+static struct ll old = {0};
+static struct ll new = {0};
+
+static void ll_put_at_0(struct ll *list, int frame_i);
+static void ll_remove(struct ll *list, int i);
+static int ll_remove_last(struct ll *list);
+
+/**
+ * If present:
+ * 1. discover which list
+ * 2. remove from it
+ * 3. add to front of new list
+ * If absent:
+ * 1. choose from evicted or new
+ * 2. add to front of old list
+ */
 
 static void usage(void);
 static int ilog10(int);
@@ -95,6 +127,9 @@ int main(int argc, char *argv[])
         );
         return EXIT_FAILURE;
     }
+
+    old_max = frame_max * 2 / 5;
+    new_max = frame_max - old_max;
 
     page_width = strtoul(argv[2 + is_verbose], NULL, 10);
 
@@ -146,7 +181,48 @@ int main(int argc, char *argv[])
 
             if (ALG_MIDPOINT_INSERTION == alg)
             {
-                /* TODO Bota no início do new list, "envelhece demais" */
+                int frame_i = table[page_i].frame_i;
+                if (!links[frame_i].is_new)
+                {
+                    /* Tira dos velhos. */
+                    if (links[frame_i].prev)
+                        links[frame_i].prev->next = links[frame_i].next;
+                    if (links[frame_i].next)
+                        links[frame_i].next->prev = links[frame_i].prev;
+                    if (links + frame_i == old_start)
+                        old_start = links[frame_i].next;
+                    if (links + frame_i == old_last)
+                        old_last = links[frame_i].prev;
+                    n_old--;
+                    n_new++;
+                }
+
+                /* Bota no início do new list. */
+                links[frame_i].prev = NULL;
+                links[frame_i].next = new_start;
+                links[frame_i].is_new = 1;
+                new_start = links + frame_i;
+                if (NULL == new_last)
+                    new_last = links + frame_i;
+
+                if (links[frame_i].is_new && n_new - 1 == new_max)
+                {
+                    if (new_last != NULL)
+                    {
+                        /* Bota último new na lista de velhos.*/
+                        if (new_last->prev)
+                            new_last->prev->next = NULL;
+                        new_last->next = old_start;
+                        new_last->is_new = 0;
+                        if (old_start && old_start->next)
+                            old_start->next->prev = new_last;
+                        old_start = new_last;
+
+                        n_old++;
+                        assert(n_old <= old_max);
+                    }
+                    n_new--;
+                }
             }
         }
         else
@@ -155,7 +231,39 @@ int main(int argc, char *argv[])
 
             page_fault_count++;
 
-            if (pool_n_frame + n_frame < frame_max)
+            if (ALG_MIDPOINT_INSERTION == alg)
+            {
+                int must_send_me_to_hell = 0;
+
+                if (n_old < old_max)
+                    frame_i = n_old++ + n_new;
+                else
+                {
+                    frame_i = old_last - links;
+
+                    if (old_last && old_last->prev)
+                        old_last->prev->next = NULL;
+                    if (old_last)
+                        old_last = old_last->prev;
+
+                    must_send_me_to_hell = 1;
+                }
+
+                /*Adiciona no início dos velhos.*/
+
+                links[frame_i].prev = NULL;
+                links[frame_i].next = old_start;
+                links[frame_i].is_new = 0;
+
+                old_start = links + frame_i;
+
+                if (!old_last)
+                    old_last = old_start;
+
+                if (must_send_me_to_hell)
+                    goto send_me_to_hell_idc;
+            }
+            else if (pool_n_frame + n_frame < frame_max)
                 frame_i = frame_start + n_frame++;
             else
             {
@@ -216,14 +324,11 @@ int main(int argc, char *argv[])
                         }
                     break;
 
-                    case ALG_MIDPOINT_INSERTION:
-		    	frame_i = 0;
-                    break;
-
                     default:
                         assert(!"Unhandled page replacement algorithm.");
                     break;
                 }
+send_me_to_hell_idc:
 
                 if (table[frames[frame_i]].is_dirty)
                     disk_write_count++;
