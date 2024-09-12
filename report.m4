@@ -16,6 +16,7 @@ Menos usado	undivert(tst$1-lru.txt)
 Menos frequente	undivert(tst$1-lfu.txt)
 FIFO	undivert(tst$1-fifo.txt)
 Global clock	undivert(tst$1-gc.txt)
+Midpoint	undivert(tst$1-mid.txt)
 _
 .TE])dnl
 .TL

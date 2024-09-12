@@ -29,9 +29,10 @@ X(mid , MIDPOINT_INSERTION   )
 
 #define AS_ENUM(X, Y) ALG_##Y
 #define AS_STR(X, Y) #X
-#define AS_CASE(X, Y) case X: page_width = Y; break;
+#define AS_CASE(X, Y) case X: page_width = Y; break
 #define NIL
 #define COMMA ,
+#define SEMICOLON ;
 
 enum alg { ALG_XS(AS_ENUM, COMMA), N_ALG, ALG_NONE = N_ALG };
 enum op {OP_WRITE = 'W', OP_READ = 'R'};
@@ -52,25 +53,16 @@ int n_frame = 0;
 int frame_start = 0;
 int pool_n_frame = 0;
 int pool_frame_start = 0;
+
 static struct link { struct link *prev, *next; int is_new; } links[1024] = {0};
-struct link *new_start = NULL, *new_last = NULL,
-            *old_start = NULL, *old_last = NULL;
-int old_max, new_max, n_old = 0, n_new = 0;
-
-/* This has gone too far. */
-
 struct ll
 {
-    int n;
-    struct link *first;
-    struct link *last;
-};
+    int n, max;
+    struct link *start, *last;
+} old = {0}, new = {0};
 
-static struct ll old = {0};
-static struct ll new = {0};
-
-static void ll_put_at_0(struct ll *list, int frame_i);
-static void ll_remove(struct ll *list, int i);
+static void ll_insert_at_0(struct ll *list, int frame_i);
+static void ll_remove(int frame_i);
 static int ll_remove_last(struct ll *list);
 
 /**
@@ -128,8 +120,8 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    old_max = frame_max * 2 / 5;
-    new_max = frame_max - old_max;
+    new.max = frame_max * 5 / 8;
+    old.max = frame_max - new.max;
 
     page_width = strtoul(argv[2 + is_verbose], NULL, 10);
 
@@ -138,7 +130,7 @@ int main(int argc, char *argv[])
 
     switch (page_width)
     {
-        PAGE_SIZE_XS(AS_CASE, NIL)
+        PAGE_SIZE_XS(AS_CASE, SEMICOLON);
         default: usage(); break;
     }
 
@@ -147,6 +139,10 @@ int main(int argc, char *argv[])
 
     if (ALG_NONE == alg)
         usage();
+
+    if (ALG_MIDPOINT_INSERTION == alg && 1 == frame_max)
+        fprintf(stderr, "Para algoritmo `mid`, numero de paginas fisicas"
+                " deve ser maior que 1\n");
 
     /* Paginate. */
 
@@ -182,47 +178,13 @@ int main(int argc, char *argv[])
             if (ALG_MIDPOINT_INSERTION == alg)
             {
                 int frame_i = table[page_i].frame_i;
-                if (!links[frame_i].is_new)
-                {
-                    /* Tira dos velhos. */
-                    if (links[frame_i].prev)
-                        links[frame_i].prev->next = links[frame_i].next;
-                    if (links[frame_i].next)
-                        links[frame_i].next->prev = links[frame_i].prev;
-                    if (links + frame_i == old_start)
-                        old_start = links[frame_i].next;
-                    if (links + frame_i == old_last)
-                        old_last = links[frame_i].prev;
-                    n_old--;
-                    n_new++;
-                }
 
-                /* Bota no início do new list. */
-                links[frame_i].prev = NULL;
-                links[frame_i].next = new_start;
-                links[frame_i].is_new = 1;
-                new_start = links + frame_i;
-                if (NULL == new_last)
-                    new_last = links + frame_i;
+                ll_remove(frame_i);
 
-                if (links[frame_i].is_new && n_new - 1 == new_max)
-                {
-                    if (new_last != NULL)
-                    {
-                        /* Bota último new na lista de velhos.*/
-                        if (new_last->prev)
-                            new_last->prev->next = NULL;
-                        new_last->next = old_start;
-                        new_last->is_new = 0;
-                        if (old_start && old_start->next)
-                            old_start->next->prev = new_last;
-                        old_start = new_last;
+                if (new.n == new.max)
+                    ll_insert_at_0(&old, ll_remove_last(&new));
 
-                        n_old++;
-                        assert(n_old <= old_max);
-                    }
-                    n_new--;
-                }
+                ll_insert_at_0(&new, frame_i);
             }
         }
         else
@@ -233,35 +195,13 @@ int main(int argc, char *argv[])
 
             if (ALG_MIDPOINT_INSERTION == alg)
             {
-                int must_send_me_to_hell = 0;
-
-                if (n_old < old_max)
-                    frame_i = n_old++ + n_new;
+                if (old.n < old.max)
+                    ll_insert_at_0(&old, frame_i = old.n + new.n);
                 else
                 {
-                    frame_i = old_last - links;
-
-                    if (old_last && old_last->prev)
-                        old_last->prev->next = NULL;
-                    if (old_last)
-                        old_last = old_last->prev;
-
-                    must_send_me_to_hell = 1;
-                }
-
-                /*Adiciona no início dos velhos.*/
-
-                links[frame_i].prev = NULL;
-                links[frame_i].next = old_start;
-                links[frame_i].is_new = 0;
-
-                old_start = links + frame_i;
-
-                if (!old_last)
-                    old_last = old_start;
-
-                if (must_send_me_to_hell)
+                    ll_insert_at_0(&old, frame_i = ll_remove_last(&old));
                     goto send_me_to_hell_idc;
+                }
             }
             else if (pool_n_frame + n_frame < frame_max)
                 frame_i = frame_start + n_frame++;
@@ -391,3 +331,147 @@ static int ilog10(int n)
         n /= 10;
     return res;
 }
+
+static void ll_insert_at_0(struct ll *list, int frame_i)
+{
+    links[frame_i].prev = NULL;
+    links[frame_i].next = list->start;
+    links[frame_i].is_new = list == &new;
+    list->start = links + frame_i;
+    if (NULL == list->last)
+        list->last = links + frame_i;
+    list->n++;
+}
+
+static void ll_remove(int frame_i)
+{
+    struct ll *list = links[frame_i].is_new ? &new : &old;
+
+    struct link *l = links + frame_i;
+
+    if (l->prev)
+        l->prev->next = l->next;
+    if (l->next)
+        l->next->prev = l->prev;
+    if (l == list->start)
+        list->start = l->next;
+    if (l == list->last)
+        list->last = l->prev;
+    list->n--;
+
+    l->prev = NULL;
+    l->next = NULL;
+}
+
+static int ll_remove_last(struct ll *list)
+{
+    struct link *l = list->last;
+
+    assert(list->n > 0);
+    assert(list->last);
+
+    if (l->prev)
+        l->prev->next = NULL;
+    list->last = l->prev;
+
+    l->prev = NULL;
+    l->next = NULL;
+    list->n--;
+
+    return l - links;
+}
+
+#if 0
+
+                /* Rework. */
+
+                if (!links[frame_i].is_new)
+                {
+                    /* Tira dos velhos. */
+                    if (links[frame_i].prev)
+                        links[frame_i].prev->next = links[frame_i].next;
+                    if (links[frame_i].next)
+                        links[frame_i].next->prev = links[frame_i].prev;
+                    if (links + frame_i == old_start)
+                        old_start = links[frame_i].next;
+                    if (links + frame_i == old_last)
+                        old_last = links[frame_i].prev;
+                    n_old--;
+                    n_new++;
+                }
+
+                /* Bota no início do new list. */
+                links[frame_i].prev = NULL;
+                links[frame_i].next = new_start;
+                links[frame_i].is_new = 1;
+                new_start = links + frame_i;
+                if (NULL == new_last)
+                    new_last = links + frame_i;
+
+                if (links[frame_i].is_new && n_new - 1 == new_max)
+                {
+                    if (new_last != NULL)
+                    {
+                        /* Bota último new na lista de velhos.*/
+                        if (new_last->prev)
+                            new_last->prev->next = NULL;
+                        new_last->next = old_start;
+                        new_last->is_new = 0;
+                        if (old_start && old_start->next)
+                            old_start->next->prev = new_last;
+                        old_start = new_last;
+
+                        n_old++;
+                        assert(n_old <= old_max);
+                    }
+                    n_new--;
+                }
+#endif
+/* IF FAULT */
+#if 0
+                if (n_old < old_max)
+                    frame_i = n_old++ + n_new;
+                else
+                {
+                    frame_i = old_last - links;
+
+                    if (old_last && old_last->prev)
+                        old_last->prev->next = NULL;
+                    if (old_last)
+                        old_last = old_last->prev;
+
+                    must_send_me_to_hell = 1;
+                }
+
+                /* Rework. */
+
+                int must_send_me_to_hell = 0;
+
+                if (n_old < old_max)
+                    frame_i = n_old++ + n_new;
+                else
+                {
+                    frame_i = old_last - links;
+
+                    if (old_last && old_last->prev)
+                        old_last->prev->next = NULL;
+                    if (old_last)
+                        old_last = old_last->prev;
+
+                    must_send_me_to_hell = 1;
+                }
+
+                /*Adiciona no início dos velhos.*/
+
+                links[frame_i].prev = NULL;
+                links[frame_i].next = old_start;
+                links[frame_i].is_new = 0;
+
+                old_start = links + frame_i;
+
+                if (!old_last)
+                    old_last = old_start;
+
+                if (must_send_me_to_hell)
+                    goto send_me_to_hell_idc;
+#endif
