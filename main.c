@@ -332,7 +332,8 @@ send_me_to_hell_idc:
 
                 old_virtual = frames[frame_i];
                 frames[frame_i] = page_i;
-                printf("Pag_virtual %lX (%d fisica)%s trocada por %lX\n", old_virtual, frame_i, swap, page_i);
+                if (is_verbose)
+                    printf("Pag_virtual %lX (%d fisica)%s trocada por %lX\n", old_virtual, frame_i, swap, page_i);
             }
 
 
